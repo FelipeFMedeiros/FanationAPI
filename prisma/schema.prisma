@@ -1,0 +1,62 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admins")
+}
+
+model Password {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  password    String
+  name        String   // Nome da senha
+  description String?  // Descrição opcional da senha
+  createdBy   String?  // ID do usuário que criou (opcional)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("passwords")
+}
+
+model LoginAttempt {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  ip        String
+  attempts  Int      @default(1)
+  blockedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("login_attempts")
+}
+
+model Recorte {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  nome          String
+  ordem         Int
+  sku           String   @unique
+  tipoRecorte   String
+  posicao       String
+  tipoProduto   String
+  material      String
+  cor           String
+  urlImagem     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("recortes")
+}
