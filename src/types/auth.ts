@@ -34,7 +34,6 @@ declare global {
     }
 }
 
-// Interface para uso nos controllers (opcional)
 export interface AuthenticatedRequest extends Request {
     userId: string;
     userName: string;
