@@ -149,7 +149,6 @@ const startServer = async () => {
             console.log(`\n🔐 Auth endpoints:`);
             console.log(`   POST http://${HOST}:${PORT}/api/auth/login`);
             console.log(`   GET  http://${HOST}:${PORT}/api/auth/validate`);
-            console.log(`   PUT  http://${HOST}:${PORT}/api/auth/update-password`);
         });
     } catch (error) {
         console.error('\n❌ Erro ao iniciar servidor:', error);

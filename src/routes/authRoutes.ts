@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/authController';
 import { bruteForceProtection } from '../middleware/bruteForce';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireAdmin } from '../middleware/auth';
 
 console.log('📁 Carregando authRoutes.ts:\t\t' + new Date().toISOString());
 
@@ -22,36 +22,73 @@ const router = Router();
  *       example:
  *         password: "senha123"
  *
- *     CreatePasswordRequest:
+ *     CreateUserRequest:
  *       type: object
  *       required:
+ *         - name
  *         - password
  *       properties:
+ *         name:
+ *           type: string
+ *           description: Nome do usuário
  *         password:
  *           type: string
  *           minLength: 4
- *           description: Nova senha a ser criada
+ *           description: Senha do usuário
  *         description:
  *           type: string
- *           description: Descrição opcional da senha
- *         name:
- *          type: string
- *          description: Nome da senha
+ *           description: Descrição opcional do usuário
  *       example:
- *         password: "novaSenha123"
- *         name: "Senha de marketing"
- *         description: "Senha para equipe de marketing"
+ *         name: "João Silva"
+ *         password: "senha123"
+ *         description: "Usuário da equipe de marketing"
  *
- *     DeletePasswordRequest:
+ *     UpdateUserRequest:
  *       type: object
  *       required:
- *         - passwordId
+ *         - userId
  *       properties:
- *         passwordId:
+ *         userId:
  *           type: string
- *           description: ID da senha a ser deletada
+ *           description: ID do usuário
+ *         name:
+ *           type: string
+ *           description: Novo nome do usuário
+ *         description:
+ *           type: string
+ *           description: Nova descrição do usuário
  *       example:
- *         passwordId: "507f1f77bcf86cd799439011"
+ *         userId: "507f1f77bcf86cd799439011"
+ *         name: "João Santos"
+ *         description: "Gerente de marketing"
+ *
+ *     DeleteUserRequest:
+ *       type: object
+ *       required:
+ *         - userId
+ *       properties:
+ *         userId:
+ *           type: string
+ *           description: ID do usuário a ser deletado
+ *       example:
+ *         userId: "507f1f77bcf86cd799439011"
+ *
+ *     UpdatePasswordRequest:
+ *       type: object
+ *       required:
+ *         - currentPassword
+ *         - newPassword
+ *       properties:
+ *         currentPassword:
+ *           type: string
+ *           description: Senha atual
+ *         newPassword:
+ *           type: string
+ *           minLength: 4
+ *           description: Nova senha
+ *       example:
+ *         currentPassword: "senhaAtual123"
+ *         newPassword: "novaSenha456"
  *
  *     ApiResponse:
  *       type: object
@@ -63,6 +100,16 @@ const router = Router();
  *         error:
  *           type: string
  *
+ *     UserInfo:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         role:
+ *           type: string
+ *
  *     LoginResponse:
  *       allOf:
  *         - $ref: '#/components/schemas/ApiResponse'
@@ -71,16 +118,17 @@ const router = Router();
  *             token:
  *               type: string
  *               description: JWT token para autenticação
- *             adminName:
- *               type: string
- *               description: Nome do administrador autenticado
+ *             user:
+ *               $ref: '#/components/schemas/UserInfo'
  *
- *     PasswordInfo:
+ *     UserDetails:
  *       type: object
  *       properties:
  *         id:
  *           type: string
  *         name:
+ *           type: string
+ *         role:
  *           type: string
  *         description:
  *           type: string
@@ -89,10 +137,8 @@ const router = Router();
  *           format: date-time
  *         createdBy:
  *           type: string
- *           description: ID do administrador que criou
  *         creatorName:
  *           type: string
- *           description: Nome do administrador que criou
  */
 
 /**
@@ -116,114 +162,12 @@ const router = Router();
  *               $ref: '#/components/schemas/LoginResponse'
  *       400:
  *         description: Dados inválidos
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
  *       401:
  *         description: Senha incorreta
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
  *       429:
  *         description: Muitas tentativas de login
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
  */
 router.post('/login', bruteForceProtection, AuthController.login);
-
-/**
- * @swagger
- * /api/auth/passwords:
- *   post:
- *     summary: Criar nova senha
- *     description: Permite que usuários autenticados criem novas senhas válidas para login
- *     tags: [Gerenciamento de Senhas]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreatePasswordRequest'
- *     responses:
- *       201:
- *         description: Senha criada com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     passwordId:
- *                       type: string
- *                       description: ID da senha criada
- *       400:
- *         description: Dados inválidos
- *       401:
- *         description: Token inválido ou ausente
- *       409:
- *         description: Senha já existe
- *
- *   get:
- *     summary: Listar todas as senhas
- *     description: Lista todas as senhas criadas (sem mostrar as senhas em si)
- *     tags: [Gerenciamento de Senhas]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Lista de senhas
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     passwords:
- *                       type: array
- *                       items:
- *                         $ref: '#/components/schemas/PasswordInfo'
- *       401:
- *         description: Token inválido ou ausente
- */
-router.post('/passwords', authenticateToken, AuthController.createPassword);
-router.get('/passwords', authenticateToken, AuthController.listPasswords);
-
-/**
- * @swagger
- * /api/auth/passwords/delete:
- *   delete:
- *     summary: Deletar senha
- *     description: Permite que qualquer pessoa delete senhas criadas (não requer autenticação)
- *     tags: [Gerenciamento de Senhas]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/DeletePasswordRequest'
- *     responses:
- *       200:
- *         description: Senha deletada com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
- *       400:
- *         description: ID da senha é obrigatório
- *       404:
- *         description: Senha não encontrada
- *       500:
- *         description: Erro interno do servidor
- */
-router.delete('/passwords/delete', AuthController.deletePassword);
 
 /**
  * @swagger
@@ -243,18 +187,20 @@ router.delete('/passwords/delete', AuthController.deletePassword);
  *                 - $ref: '#/components/schemas/ApiResponse'
  *                 - type: object
  *                   properties:
- *                     adminName:
- *                       type: string
- *                       description: Nome do administrador
+ *                     user:
+ *                       $ref: '#/components/schemas/UserInfo'
+ *       401:
+ *         description: Token inválido ou expirado
  */
 router.get('/validate', authenticateToken, AuthController.validateToken);
 
 /**
  * @swagger
- * /api/auth/update-password:
- *   put:
- *     summary: Atualizar senha
- *     tags: [Autenticação]
+ * /api/auth/users:
+ *   post:
+ *     summary: Criar novo usuário
+ *     description: Permite que usuários autenticados criem novos usuários
+ *     tags: [Gerenciamento de Usuários]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -262,23 +208,110 @@ router.get('/validate', authenticateToken, AuthController.validateToken);
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - currentPassword
- *               - newPassword
- *             properties:
- *               currentPassword:
- *                 type: string
- *               newPassword:
- *                 type: string
- *                 minLength: 6
+ *             $ref: '#/components/schemas/CreateUserRequest'
+ *     responses:
+ *       201:
+ *         description: Usuário criado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     userId:
+ *                       type: string
+ *                       description: ID do usuário criado
+ *       400:
+ *         description: Dados inválidos
+ *       401:
+ *         description: Token inválido ou ausente
+ *       409:
+ *         description: Nome de usuário ou senha já existe
+ *
+ *   get:
+ *     summary: Listar todos os usuários
+ *     description: Lista todos os usuários do sistema
+ *     tags: [Gerenciamento de Usuários]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Senha atualizada com sucesso
+ *         description: Lista de usuários
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     users:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/UserDetails'
  *       401:
- *         description: Senha atual incorreta
+ *         description: Token inválido ou ausente
  */
-router.put('/update-password', authenticateToken, AuthController.updatePassword);
+router.post('/users', authenticateToken, AuthController.createUser);
+router.get('/users', authenticateToken, AuthController.listUsers);
+
+/**
+ * @swagger
+ * /api/auth/users/update:
+ *   put:
+ *     summary: Atualizar informações do usuário
+ *     description: Permite atualizar nome e descrição do usuário (próprio usuário ou admin)
+ *     tags: [Gerenciamento de Usuários]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateUserRequest'
+ *     responses:
+ *       200:
+ *         description: Usuário atualizado com sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       401:
+ *         description: Token inválido
+ *       403:
+ *         description: Sem permissão para atualizar este usuário
+ *       404:
+ *         description: Usuário não encontrado
+ */
+router.put('/users/update', authenticateToken, AuthController.updateUser);
+
+/**
+ * @swagger
+ * /api/auth/users/delete:
+ *   delete:
+ *     summary: Deletar usuário
+ *     description: Permite que administradores ou criadores deletem usuários (exceto admin principal e própria conta)
+ *     tags: [Gerenciamento de Usuários]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DeleteUserRequest'
+ *     responses:
+ *       200:
+ *         description: Usuário deletado com sucesso
+ *       400:
+ *         description: ID do usuário é obrigatório
+ *       401:
+ *         description: Token inválido ou ausente
+ *       403:
+ *         description: Sem permissão para deletar (admin principal, própria conta, ou permissões insuficientes)
+ *       404:
+ *         description: Usuário não encontrado
+ */
+router.delete('/users/delete', authenticateToken, AuthController.deleteUser);
 
 console.log('✅ AuthRoutes carregado com sucesso:\t' + new Date().toISOString());
 

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../config/settings';
-import { JwtPayload, AuthenticatedRequest } from '../types/auth';
+import { JwtPayload } from '../types/auth';
 
 export const authenticateToken = (req: Request, res: Response, next: NextFunction): void => {
     const authHeader = req.headers['authorization'];
@@ -18,8 +18,12 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-        (req as unknown as AuthenticatedRequest).adminId = decoded.adminId;
-        (req as unknown as AuthenticatedRequest).adminName = decoded.adminName;
+
+        // Agora podemos adicionar diretamente ao req sem cast
+        req.userId = decoded.userId;
+        req.userName = decoded.userName;
+        req.userRole = decoded.userRole;
+
         next();
     } catch (error) {
         if (error instanceof jwt.TokenExpiredError) {
@@ -46,4 +50,18 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
             error: 'INTERNAL_ERROR',
         });
     }
+};
+
+// Middleware adicional para verificar se é admin
+export const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
+    if (req.userRole !== 'admin') {
+        res.status(403).json({
+            success: false,
+            message: 'Acesso negado. Privilégios de administrador necessários.',
+            error: 'ADMIN_REQUIRED',
+        });
+        return;
+    }
+
+    next();
 };

@@ -6,11 +6,13 @@ import { JWT_SECRET, JWT_EXPIRES_IN, ADMIN_PASSWORD, ADMIN_NAME } from '../confi
 import {
     LoginRequest,
     LoginResponse,
-    CreatePasswordRequest,
-    CreatePasswordResponse,
-    DeletePasswordRequest,
-    DeletePasswordResponse,
-    ListPasswordsResponse,
+    CreateUserRequest,
+    CreateUserResponse,
+    UpdateUserRequest,
+    UpdateUserResponse,
+    DeleteUserRequest,
+    DeleteUserResponse,
+    ListUsersResponse,
     AuthenticatedRequest,
 } from '../types/auth';
 import { recordLoginAttempt } from '../middleware/bruteForce';
@@ -18,19 +20,23 @@ import { recordLoginAttempt } from '../middleware/bruteForce';
 export class AuthController {
     static async initializeAdmin(): Promise<void> {
         try {
-            const existingAdmin = await prisma.admin.findFirst();
+            const existingAdmin = await prisma.user.findFirst({
+                where: { role: 'admin' },
+            });
 
             if (!existingAdmin) {
                 const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 12);
-                await prisma.admin.create({
+                await prisma.user.create({
                     data: {
                         name: ADMIN_NAME,
                         password: hashedPassword,
+                        role: 'admin',
+                        description: 'Administrador principal do sistema',
                     },
                 });
-                console.log('✅ Admin criado com sucesso!');
+                console.log('✅ Admin principal criado com sucesso!');
             } else {
-                console.log('ℹ️  Admin já existe no banco de dados');
+                console.log('ℹ️  Admin principal já existe no banco de dados');
             }
         } catch (error) {
             console.error('❌ Erro ao inicializar admin:', error);
@@ -53,54 +59,20 @@ export class AuthController {
                 return;
             }
 
-            // Verificar se a senha é a senha do admin principal
-            const admin = await prisma.admin.findFirst();
-            let isValidPassword = false;
-            let loginSource = '';
+            // Buscar todos os usuários
+            const users = await prisma.user.findMany();
+            let authenticatedUser = null;
 
-            if (admin) {
-                const isAdminPassword = await bcrypt.compare(password, admin.password);
-                if (isAdminPassword) {
-                    isValidPassword = true;
-                    loginSource = 'admin';
+            // Verificar senha contra todos os usuários
+            for (const user of users) {
+                const isMatch = await bcrypt.compare(password, user.password);
+                if (isMatch) {
+                    authenticatedUser = user;
+                    break;
                 }
             }
 
-            // Se não for a senha do admin, verificar nas senhas criadas
-            if (!isValidPassword) {
-                const savedPasswords = await prisma.password.findMany();
-                let matchedPassword = null; // Adicione esta variável
-
-                for (const savedPassword of savedPasswords) {
-                    const isMatch = await bcrypt.compare(password, savedPassword.password);
-                    if (isMatch) {
-                        isValidPassword = true;
-                        loginSource = 'custom';
-                        matchedPassword = savedPassword; // Guarde a senha encontrada
-                        break;
-                    }
-                }
-
-                // Gerar token JWT
-                const token = jwt.sign(
-                    {
-                        adminId: matchedPassword ? matchedPassword.id : admin?.id || 'system',
-                        adminName: loginSource === 'custom' ? matchedPassword?.name : admin?.name || ADMIN_NAME,
-                    },
-                    JWT_SECRET as string,
-                    { expiresIn: JWT_EXPIRES_IN },
-                );
-
-                // Resposta
-                res.status(200).json({
-                    success: true,
-                    token,
-                    adminName: loginSource === 'custom' ? matchedPassword?.name : admin?.name || ADMIN_NAME,
-                    message: `Login realizado com sucesso (${loginSource})`,
-                } as LoginResponse);
-            }
-
-            if (!isValidPassword) {
+            if (!authenticatedUser) {
                 await recordLoginAttempt(clientIP, false);
                 res.status(401).json({
                     success: false,
@@ -113,8 +85,9 @@ export class AuthController {
             // Gerar token JWT
             const token = jwt.sign(
                 {
-                    adminId: admin?.id || 'system',
-                    adminName: admin?.name || ADMIN_NAME,
+                    userId: authenticatedUser.id,
+                    userName: authenticatedUser.name,
+                    userRole: authenticatedUser.role,
                 },
                 JWT_SECRET as string,
                 { expiresIn: JWT_EXPIRES_IN },
@@ -126,8 +99,12 @@ export class AuthController {
             res.status(200).json({
                 success: true,
                 token,
-                adminName: admin?.name || ADMIN_NAME,
-                message: `Login realizado com sucesso (${loginSource})`,
+                user: {
+                    id: authenticatedUser.id,
+                    name: authenticatedUser.name,
+                    role: authenticatedUser.role,
+                },
+                message: `Login realizado com sucesso`,
             } as LoginResponse);
         } catch (error) {
             console.error('❌ Erro no login:', error);
@@ -139,27 +116,18 @@ export class AuthController {
         }
     }
 
-    static async createPassword(req: Request, res: Response): Promise<void> {
+    static async createUser(req: Request, res: Response): Promise<void> {
         try {
-            const { password, name, description }: CreatePasswordRequest = req.body;
-            const createdBy = (req as unknown as AuthenticatedRequest).adminId;
+            const { name, password, description }: CreateUserRequest = req.body;
+            const createdBy = (req as AuthenticatedRequest).userId;
 
             // Validação básica
-            if (!password) {
+            if (!name || !password) {
                 res.status(400).json({
                     success: false,
-                    message: 'Senha é obrigatória',
-                    error: 'MISSING_PASSWORD',
-                } as CreatePasswordResponse);
-                return;
-            }
-
-            if (!name) {
-                res.status(400).json({
-                    success: false,
-                    message: 'Nome é obrigatório',
-                    error: 'MISSING_NAME',
-                } as CreatePasswordResponse);
+                    message: 'Nome e senha são obrigatórios',
+                    error: 'MISSING_REQUIRED_FIELDS',
+                } as CreateUserResponse);
                 return;
             }
 
@@ -168,30 +136,45 @@ export class AuthController {
                     success: false,
                     message: 'Senha deve ter pelo menos 4 caracteres',
                     error: 'PASSWORD_TOO_SHORT',
-                } as CreatePasswordResponse);
+                } as CreateUserResponse);
+                return;
+            }
+
+            // Verificar se já existe usuário com o mesmo nome
+            const existingUser = await prisma.user.findFirst({
+                where: { name },
+            });
+
+            if (existingUser) {
+                res.status(409).json({
+                    success: false,
+                    message: 'Já existe um usuário com este nome',
+                    error: 'USER_NAME_EXISTS',
+                } as CreateUserResponse);
                 return;
             }
 
             // Verificar se a senha já existe
-            const existingPasswords = await prisma.password.findMany();
-            for (const existingPassword of existingPasswords) {
-                const isMatch = await bcrypt.compare(password, existingPassword.password);
+            const allUsers = await prisma.user.findMany();
+            for (const user of allUsers) {
+                const isMatch = await bcrypt.compare(password, user.password);
                 if (isMatch) {
                     res.status(409).json({
                         success: false,
-                        message: 'Esta senha já existe',
+                        message: 'Esta senha já está sendo usada por outro usuário',
                         error: 'PASSWORD_ALREADY_EXISTS',
-                    } as CreatePasswordResponse);
+                    } as CreateUserResponse);
                     return;
                 }
             }
 
-            // Criptografar e salvar a nova senha
+            // Criptografar e salvar o novo usuário
             const hashedPassword = await bcrypt.hash(password, 12);
-            const newPassword = await prisma.password.create({
+            const newUser = await prisma.user.create({
                 data: {
+                    name,
                     password: hashedPassword,
-                    name: name,
+                    role: 'user',
                     description: description || null,
                     createdBy: createdBy || null,
                 },
@@ -199,87 +182,42 @@ export class AuthController {
 
             res.status(201).json({
                 success: true,
-                passwordId: newPassword.id,
-                message: 'Senha criada com sucesso',
-            } as CreatePasswordResponse);
+                userId: newUser.id,
+                message: 'Usuário criado com sucesso',
+            } as CreateUserResponse);
         } catch (error) {
-            console.error('❌ Erro ao criar senha:', error);
+            console.error('❌ Erro ao criar usuário:', error);
             res.status(500).json({
                 success: false,
                 message: 'Erro interno do servidor',
                 error: 'INTERNAL_ERROR',
-            } as CreatePasswordResponse);
+            } as CreateUserResponse);
         }
     }
 
-    static async deletePassword(req: Request, res: Response): Promise<void> {
+    static async listUsers(req: Request, res: Response): Promise<void> {
         try {
-            const { passwordId }: DeletePasswordRequest = req.body;
-
-            // Validação básica
-            if (!passwordId) {
-                res.status(400).json({
-                    success: false,
-                    message: 'ID da senha é obrigatório',
-                    error: 'MISSING_PASSWORD_ID',
-                } as DeletePasswordResponse);
-                return;
-            }
-
-            // Verificar se a senha existe
-            const existingPassword = await prisma.password.findUnique({
-                where: { id: passwordId },
-            });
-
-            if (!existingPassword) {
-                res.status(404).json({
-                    success: false,
-                    message: 'Senha não encontrada',
-                    error: 'PASSWORD_NOT_FOUND',
-                } as DeletePasswordResponse);
-                return;
-            }
-
-            // Deletar a senha
-            await prisma.password.delete({
-                where: { id: passwordId },
-            });
-
-            res.status(200).json({
-                success: true,
-                message: 'Senha deletada com sucesso',
-            } as DeletePasswordResponse);
-        } catch (error) {
-            console.error('❌ Erro ao deletar senha:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Erro interno do servidor',
-                error: 'INTERNAL_ERROR',
-            } as DeletePasswordResponse);
-        }
-    }
-
-    static async listPasswords(req: Request, res: Response): Promise<void> {
-        try {
-            // Buscar todas as senhas
-            const passwords = await prisma.password.findMany({
+            // Buscar todos os usuários
+            const users = await prisma.user.findMany({
                 select: {
                     id: true,
                     name: true,
+                    role: true,
                     description: true,
                     createdAt: true,
                     createdBy: true,
                 },
-                orderBy: {
-                    createdAt: 'desc',
-                },
+                orderBy: [
+                    { role: 'desc' }, // Admin primeiro
+                    { createdAt: 'desc' },
+                ],
             });
 
-            // Coletando todos os IDs de criadores únicos para buscar seus nomes
-            const creatorIds = [...new Set(passwords.map((p) => p.createdBy).filter((id) => id))];
+            // Coletando todos os IDs de criadores únicos
+            const creatorIds = [...new Set(users.map((u) => u.createdBy).filter((id) => id))];
 
-            // Buscar admins que criaram senhas
-            const creators = await prisma.admin.findMany({
+            // Buscar usuários que criaram outros usuários
+            const creators = await prisma.user.findMany({
                 where: {
                     id: {
                         in: creatorIds as string[],
@@ -297,106 +235,209 @@ export class AuthController {
                 creatorMap.set(creator.id, creator.name);
             });
 
-            // Formatar a resposta
             res.status(200).json({
                 success: true,
-                passwords: passwords.map((pwd) => ({
-                    id: pwd.id,
-                    name: pwd.name,
-                    description: pwd.description,
-                    createdAt: pwd.createdAt.toISOString(),
-                    createdBy: pwd.createdBy,
-                    creatorName: pwd.createdBy ? creatorMap.get(pwd.createdBy) || ADMIN_NAME : null,
+                users: users.map((user) => ({
+                    id: user.id,
+                    name: user.name,
+                    role: user.role,
+                    description: user.description,
+                    createdAt: user.createdAt.toISOString(),
+                    createdBy: user.createdBy,
+                    creatorName: user.createdBy ? creatorMap.get(user.createdBy) || 'Sistema' : null,
                 })),
-                message: 'Senhas listadas com sucesso',
-            } as ListPasswordsResponse);
+                message: 'Usuários listados com sucesso',
+            } as ListUsersResponse);
         } catch (error) {
-            console.error('❌ Erro ao listar senhas:', error);
+            console.error('❌ Erro ao listar usuários:', error);
             res.status(500).json({
                 success: false,
                 message: 'Erro interno do servidor',
                 error: 'INTERNAL_ERROR',
-            } as ListPasswordsResponse);
+            } as ListUsersResponse);
+        }
+    }
+
+    static async updateUser(req: Request, res: Response): Promise<void> {
+        try {
+            const { userId, name, description }: UpdateUserRequest = req.body;
+            const requestingUserId = (req as AuthenticatedRequest).userId;
+            const requestingUserRole = (req as AuthenticatedRequest).userRole;
+
+            // Validação básica
+            if (!userId) {
+                res.status(400).json({
+                    success: false,
+                    message: 'ID do usuário é obrigatório',
+                    error: 'MISSING_USER_ID',
+                } as UpdateUserResponse);
+                return;
+            }
+
+            // Verificar se o usuário existe
+            const existingUser = await prisma.user.findUnique({
+                where: { id: userId },
+            });
+
+            if (!existingUser) {
+                res.status(404).json({
+                    success: false,
+                    message: 'Usuário não encontrado',
+                    error: 'USER_NOT_FOUND',
+                } as UpdateUserResponse);
+                return;
+            }
+
+            // Verificar permissões - só admin ou o próprio usuário pode atualizar
+            if (requestingUserRole !== 'admin' && requestingUserId !== userId) {
+                res.status(403).json({
+                    success: false,
+                    message: 'Sem permissão para atualizar este usuário',
+                    error: 'INSUFFICIENT_PERMISSIONS',
+                } as UpdateUserResponse);
+                return;
+            }
+
+            // Verificar se o novo nome já existe (se fornecido)
+            if (name && name !== existingUser.name) {
+                const nameExists = await prisma.user.findFirst({
+                    where: {
+                        name,
+                        id: { not: userId },
+                    },
+                });
+
+                if (nameExists) {
+                    res.status(409).json({
+                        success: false,
+                        message: 'Já existe um usuário com este nome',
+                        error: 'USER_NAME_EXISTS',
+                    } as UpdateUserResponse);
+                    return;
+                }
+            }
+
+            // Atualizar usuário
+            const updateData: any = { updatedAt: new Date() };
+            if (name) updateData.name = name;
+            if (description !== undefined) updateData.description = description;
+
+            await prisma.user.update({
+                where: { id: userId },
+                data: updateData,
+            });
+
+            res.status(200).json({
+                success: true,
+                message: 'Usuário atualizado com sucesso',
+            } as UpdateUserResponse);
+        } catch (error) {
+            console.error('❌ Erro ao atualizar usuário:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Erro interno do servidor',
+                error: 'INTERNAL_ERROR',
+            } as UpdateUserResponse);
+        }
+    }
+
+    static async deleteUser(req: Request, res: Response): Promise<void> {
+        try {
+            const { userId }: DeleteUserRequest = req.body;
+            const requestingUserId = (req as AuthenticatedRequest).userId;
+            const requestingUserRole = (req as AuthenticatedRequest).userRole;
+
+            // Validação básica
+            if (!userId) {
+                res.status(400).json({
+                    success: false,
+                    message: 'ID do usuário é obrigatório',
+                    error: 'MISSING_USER_ID',
+                } as DeleteUserResponse);
+                return;
+            }
+
+            // Verificar se o usuário existe
+            const existingUser = await prisma.user.findUnique({
+                where: { id: userId },
+            });
+
+            if (!existingUser) {
+                res.status(404).json({
+                    success: false,
+                    message: 'Usuário não encontrado',
+                    error: 'USER_NOT_FOUND',
+                } as DeleteUserResponse);
+                return;
+            }
+
+            // Não permitir deletar admin principal
+            if (existingUser.role === 'admin') {
+                res.status(403).json({
+                    success: false,
+                    message: 'Não é possível deletar o administrador principal',
+                    error: 'CANNOT_DELETE_ADMIN',
+                } as DeleteUserResponse);
+                return;
+            }
+
+            // Não permitir que usuário delete a si mesmo
+            if (requestingUserId === userId) {
+                res.status(403).json({
+                    success: false,
+                    message: 'Não é possível deletar sua própria conta',
+                    error: 'CANNOT_DELETE_SELF',
+                } as DeleteUserResponse);
+                return;
+            }
+
+            // Verificar permissões - apenas admin ou o criador do usuário pode deletar
+            const canDelete = requestingUserRole === 'admin' || existingUser.createdBy === requestingUserId;
+
+            if (!canDelete) {
+                res.status(403).json({
+                    success: false,
+                    message:
+                        'Sem permissão para deletar este usuário. Apenas administradores ou quem criou o usuário podem deletá-lo.',
+                    error: 'INSUFFICIENT_PERMISSIONS',
+                } as DeleteUserResponse);
+                return;
+            }
+
+            // Deletar o usuário
+            await prisma.user.delete({
+                where: { id: userId },
+            });
+
+            res.status(200).json({
+                success: true,
+                message: 'Usuário deletado com sucesso',
+            } as DeleteUserResponse);
+        } catch (error) {
+            console.error('❌ Erro ao deletar usuário:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Erro interno do servidor',
+                error: 'INTERNAL_ERROR',
+            } as DeleteUserResponse);
         }
     }
 
     static async validateToken(req: Request, res: Response): Promise<void> {
         try {
-            // Se chegou até aqui, o token é válido (middleware authenticateToken)
-            const authReq = req as unknown as AuthenticatedRequest;
+            const authReq = req as AuthenticatedRequest;
 
             res.status(200).json({
                 success: true,
                 message: 'Token válido',
-                adminName: authReq.adminName || ADMIN_NAME, // Usar ADMIN_NAME como fallback
+                user: {
+                    id: authReq.userId,
+                    name: authReq.userName,
+                    role: authReq.userRole,
+                },
             });
         } catch (error) {
             console.error('❌ Erro ao validar token:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Erro interno do servidor',
-                error: 'INTERNAL_ERROR',
-            });
-        }
-    }
-
-    static async updatePassword(req: Request, res: Response): Promise<void> {
-        try {
-            const { currentPassword, newPassword } = req.body;
-
-            if (!currentPassword || !newPassword) {
-                res.status(400).json({
-                    success: false,
-                    message: 'Senha atual e nova senha são obrigatórias',
-                    error: 'MISSING_PASSWORDS',
-                });
-                return;
-            }
-
-            if (newPassword.length < 6) {
-                res.status(400).json({
-                    success: false,
-                    message: 'Nova senha deve ter pelo menos 6 caracteres',
-                    error: 'PASSWORD_TOO_SHORT',
-                });
-                return;
-            }
-
-            const admin = await prisma.admin.findFirst();
-
-            if (!admin) {
-                res.status(500).json({
-                    success: false,
-                    message: 'Admin não encontrado',
-                    error: 'ADMIN_NOT_FOUND',
-                });
-                return;
-            }
-
-            const isCurrentPasswordValid = await bcrypt.compare(currentPassword, admin.password);
-
-            if (!isCurrentPasswordValid) {
-                res.status(401).json({
-                    success: false,
-                    message: 'Senha atual incorreta',
-                    error: 'INVALID_CURRENT_PASSWORD',
-                });
-                return;
-            }
-
-            const hashedNewPassword = await bcrypt.hash(newPassword, 12);
-
-            await prisma.admin.update({
-                where: { id: admin.id },
-                data: { password: hashedNewPassword },
-            });
-
-            res.status(200).json({
-                success: true,
-                message: 'Senha atualizada com sucesso',
-            });
-        } catch (error) {
-            console.error('❌ Erro ao atualizar senha:', error);
             res.status(500).json({
                 success: false,
                 message: 'Erro interno do servidor',
