@@ -11,6 +11,7 @@ import { HOST, PORT, NODE_ENV, validateSettings } from './config/settings';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
+import usersRoutes from './routes/usersRoutes';
 
 // Import controllers
 import { AuthController } from './controllers/authController';
@@ -68,7 +69,7 @@ const limiter = rateLimit({
 
 // Middlewares
 app.use(limiter);
-app.use(cors({ origin: "*", credentials: true }));
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -79,7 +80,10 @@ app.use((req: Request, res: Response, next) => {
 });
 
 // Routes
+console.log('🛣️  Registrando rotas...');
 app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
+console.log('✅ Todas as rotas registradas');
 
 // Status check route
 app.get('/status', (req: Request, res: Response) => {
@@ -103,6 +107,7 @@ app.get('/', (req: Request, res: Response) => {
         endpoints: {
             status: '/status',
             auth: '/api/auth',
+            users: '/api/users',
             documentation: '/api-docs',
         },
     });
@@ -149,6 +154,12 @@ const startServer = async () => {
             console.log(`\n🔐 Auth endpoints:`);
             console.log(`   POST http://${HOST}:${PORT}/api/auth/login`);
             console.log(`   GET  http://${HOST}:${PORT}/api/auth/validate`);
+
+            console.log(`\n👥 Users endpoints:`);
+            console.log(`   POST http://${HOST}:${PORT}/api/users`);
+            console.log(`   GET  http://${HOST}:${PORT}/api/users`);
+            console.log(`   PUT  http://${HOST}:${PORT}/api/users/update`);
+            console.log(`   DEL  http://${HOST}:${PORT}/api/users/delete`);
         });
     } catch (error) {
         console.error('\n❌ Erro ao iniciar servidor:', error);
