@@ -45,7 +45,7 @@ const router = express.Router();
  *           description: Posição do recorte
  *         tipoProduto:
  *           type: string
- *           enum: [boné americano, boné trucker]
+ *           enum: [americano, trucker]
  *           description: Tipo do produto
  *         material:
  *           type: string
@@ -77,7 +77,7 @@ const router = express.Router();
  *         sku: "BONE001"
  *         tipoRecorte: "frente"
  *         posicao: "frente"
- *         tipoProduto: "boné americano"
+ *         tipoProduto: "americano"
  *         material: "linho"
  *         cor: "azul marinho"
  *         urlImagem: "https://res.cloudinary.com/..."
@@ -115,7 +115,7 @@ const router = express.Router();
  *           enum: [frente, traseira]
  *         tipoProduto:
  *           type: string
- *           enum: [boné americano, boné trucker]
+ *           enum: [americano, trucker]
  *         material:
  *           type: string
  *           enum: [linho]
@@ -150,7 +150,7 @@ const router = express.Router();
  *           enum: [frente, traseira]
  *         tipoProduto:
  *           type: string
- *           enum: [boné americano, boné trucker]
+ *           enum: [americano, trucker]
  *         material:
  *           type: string
  *           enum: [linho]
@@ -192,7 +192,7 @@ const router = express.Router();
  *                 description: Arquivo de imagem
  *               tipoProduto:
  *                 type: string
- *                 enum: [boné americano, boné trucker]
+ *                 enum: [americano, trucker]
  *               tipoRecorte:
  *                 type: string
  *                 enum: [frente, aba, lateral]
@@ -347,7 +347,7 @@ router.post('/', authenticateToken, RecorteController.createRecorte);
  *         name: tipoProduto
  *         schema:
  *           type: string
- *           enum: [boné americano, boné trucker]
+ *           enum: [americano, trucker]
  *         description: Filtrar por tipo de produto
  *       - in: query
  *         name: material

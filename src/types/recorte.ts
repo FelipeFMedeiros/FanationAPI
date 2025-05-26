@@ -77,7 +77,7 @@ export interface CloudinaryUploadResult {
 // Tipos para os valores permitidos
 export const TIPOS_RECORTE = ['frente', 'aba', 'lateral'] as const;
 export const POSICOES = ['frente', 'traseira'] as const;
-export const TIPOS_PRODUTO = ['boné americano', 'boné trucker'] as const;
+export const TIPOS_PRODUTO = ['americano', 'trucker'] as const;
 export const MATERIAIS = ['linho'] as const;
 export const CORES = ['azul marinho', 'laranja'] as const;
 

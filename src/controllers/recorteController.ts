@@ -130,7 +130,7 @@ export class RecorteController {
             // Validar valores dos enums
             const validTipoRecorte = ['frente', 'aba', 'lateral'];
             const validPosicao = ['frente', 'traseira'];
-            const validTipoProduto = ['boné americano', 'boné trucker'];
+            const validTipoProduto = ['americano', 'trucker'];
             const validMaterial = ['linho'];
             const validCor = ['azul marinho', 'laranja'];
 
@@ -200,25 +200,6 @@ export class RecorteController {
                     message: 'SKU já existe',
                     error: 'SKU_EXISTS',
                     existingSku: data.sku,
-                });
-                return;
-            }
-
-            // Verificar se a ordem já está sendo usada para o mesmo tipo de produto
-            const existingOrdem = await prisma.recorte.findFirst({
-                where: {
-                    tipoProduto: data.tipoProduto,
-                    ordem: data.ordem,
-                },
-            });
-
-            if (existingOrdem) {
-                res.status(409).json({
-                    success: false,
-                    message: `Ordem ${data.ordem} já está sendo usada para o tipo de produto "${data.tipoProduto}"`,
-                    error: 'ORDEM_EXISTS',
-                    conflictingOrder: data.ordem,
-                    conflictingProduct: data.tipoProduto,
                 });
                 return;
             }
