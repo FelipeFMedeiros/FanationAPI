@@ -46,6 +46,7 @@ model Recorte {
   material    String
   cor         String
   urlImagem   String
+  status      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
