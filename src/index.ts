@@ -8,10 +8,12 @@ import swaggerJsdoc from 'swagger-jsdoc';
 
 // Import environment variables
 import { HOST, PORT, NODE_ENV, validateSettings } from './config/settings';
+import { validateCloudinaryConfig } from './config/cloudinary';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
 import usersRoutes from './routes/usersRoutes';
+import recorteRoutes from './routes/recorteRoutes';
 
 // Import controllers
 import { AuthController } from './controllers/authController';
@@ -57,7 +59,7 @@ app.set('trust proxy', 1);
 // Rate limiting global
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 100, // Máximo 100 requests por IP por janela
+    max: 1000, // Máximo 1000 requests por IP por janela
     message: {
         success: false,
         message: 'Muitas requisições deste IP, tente novamente em 15 minutos.',
@@ -68,8 +70,8 @@ const limiter = rateLimit({
 });
 
 // Middlewares
+app.use(cors({ origin: '*' }));
 app.use(limiter);
-app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -83,6 +85,7 @@ app.use((req: Request, res: Response, next) => {
 console.log('🛣️  Registrando rotas...');
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/recortes', recorteRoutes);
 console.log('✅ Todas as rotas registradas');
 
 // Status check route
@@ -108,6 +111,7 @@ app.get('/', (req: Request, res: Response) => {
             status: '/status',
             auth: '/api/auth',
             users: '/api/users',
+            recortes: '/api/recortes',
             documentation: '/api-docs',
         },
     });
@@ -141,6 +145,9 @@ const startServer = async () => {
         // Validar configurações
         validateSettings();
 
+        // Validar configuração do Cloudinary
+        validateCloudinaryConfig();
+
         // Inicializar admin padrão
         console.log('\n👤 Inicializando usuário admin...');
         await AuthController.initializeAdmin();
@@ -160,6 +167,16 @@ const startServer = async () => {
             console.log(`   GET  http://${HOST}:${PORT}/api/users`);
             console.log(`   PUT  http://${HOST}:${PORT}/api/users/update`);
             console.log(`   DEL  http://${HOST}:${PORT}/api/users/delete`);
+
+            console.log(`\n🎨 Recortes endpoints:`);
+            console.log(`   POST http://${HOST}:${PORT}/api/recortes/upload`);
+            console.log(`   POST http://${HOST}:${PORT}/api/recortes`);
+            console.log(`   GET  http://${HOST}:${PORT}/api/recortes`);
+            console.log(`   GET  http://${HOST}:${PORT}/api/recortes/{id}`);
+            console.log(`   GET  http://${HOST}:${PORT}/api/recortes/sku/{sku}`);
+            console.log(`   PUT  http://${HOST}:${PORT}/api/recortes/{id}`);
+            console.log(`   PUT  http://${HOST}:${PORT}/api/recortes/{id}/image`);
+            console.log(`   DEL  http://${HOST}:${PORT}/api/recortes/{id}`);
         });
     } catch (error) {
         console.error('\n❌ Erro ao iniciar servidor:', error);
