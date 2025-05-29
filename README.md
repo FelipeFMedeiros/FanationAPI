@@ -4,6 +4,10 @@
 
 [![Node Version][node-version-shield]][node-url] [![Express Version][express-version-shield]][express-url] [![TypeScript Version][typescript-version-shield]][typescript-url] [![Prisma Version][prisma-version-shield]][prisma-url]
 
+<p align="center">
+    <img src="swagger-screenshot.png" alt="Swagger UI Screenshot" width="700"/>
+</p>
+
 ## 📋 Sobre o Projeto
 
 FanationAPI é uma API RESTful desenvolvida para gerenciar recortes de produtos, permitindo o controle de imagens em camadas que, quando combinadas, formam uma única imagem final. A API oferece:
@@ -239,6 +243,8 @@ npm run prisma:studio    # Interface visual para o banco
 ## 🔍 Mais Informações
 
 Para mais detalhes sobre como consumir esta API, consulte a documentação Swagger disponível em `/api-docs` após iniciar o servidor.
+
+Para saber mais sobre o desafio técnico, acesse o [repositório do desafio](https://github.com/seubone/desafio-tech/tree/main).
 
 ---
 

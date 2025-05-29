@@ -93,8 +93,51 @@ export class UsersController {
 
     static async listUsers(req: Request, res: Response): Promise<void> {
         try {
-            // Buscar todos os usuários
+            // Extrair parâmetros de query
+            const { search, sortBy = 'role', sortOrder = 'desc' } = req.query;
+
+            // Validar parâmetros de ordenação
+            const validSortFields = ['role', 'name', 'createdAt'];
+            const validSortOrders = ['asc', 'desc'];
+
+            const finalSortBy = validSortFields.includes(sortBy as string) ? (sortBy as string) : 'role';
+            const finalSortOrder = validSortOrders.includes(sortOrder as string)
+                ? (sortOrder as 'asc' | 'desc')
+                : 'desc';
+
+            // Construir filtro de busca
+            const whereClause: any = {};
+            if (search && typeof search === 'string' && search.trim()) {
+                whereClause.name = {
+                    contains: search.trim(),
+                    mode: 'insensitive', // Ignorar maiúsculas/minúsculas
+                };
+            }
+
+            // Construir ordenação
+            let orderBy: any[] = [];
+
+            if (finalSortBy === 'role') {
+                // Para role, sempre mostrar admin primeiro, depois ordenar por nome
+                orderBy = [
+                    { role: finalSortOrder },
+                    { name: 'asc' }, // Nome sempre crescente como critério secundário
+                ];
+            } else if (finalSortBy === 'name') {
+                orderBy = [
+                    { name: finalSortOrder },
+                    { role: 'desc' }, // Role como critério secundário
+                ];
+            } else if (finalSortBy === 'createdAt') {
+                orderBy = [
+                    { createdAt: finalSortOrder },
+                    { name: 'asc' }, // Nome como critério secundário
+                ];
+            }
+
+            // Buscar usuários com filtros e ordenação
             const users = await prisma.user.findMany({
+                where: whereClause,
                 select: {
                     id: true,
                     name: true,
@@ -103,10 +146,7 @@ export class UsersController {
                     createdAt: true,
                     createdBy: true,
                 },
-                orderBy: [
-                    { role: 'desc' }, // Admin primeiro
-                    { createdAt: 'desc' },
-                ],
+                orderBy,
             });
 
             // Coletando todos os IDs de criadores únicos
@@ -131,7 +171,8 @@ export class UsersController {
                 creatorMap.set(creator.id, creator.name);
             });
 
-            res.status(200).json({
+            // Preparar resposta com informações de filtros aplicados
+            const responseData = {
                 success: true,
                 users: users.map((user) => ({
                     id: user.id,
@@ -142,8 +183,18 @@ export class UsersController {
                     createdBy: user.createdBy,
                     creatorName: user.createdBy ? creatorMap.get(user.createdBy) || 'Sistema' : null,
                 })),
-                message: 'Usuários listados com sucesso',
-            } as ListUsersResponse);
+                total: users.length,
+                filters: {
+                    search: search || null,
+                    sortBy: finalSortBy,
+                    sortOrder: finalSortOrder,
+                },
+                message: search
+                    ? `${users.length} usuário(s) encontrado(s) para "${search}"`
+                    : 'Usuários listados com sucesso',
+            };
+
+            res.status(200).json(responseData as ListUsersResponse);
         } catch (error) {
             console.error('❌ Erro ao listar usuários:', error);
             res.status(500).json({
@@ -184,8 +235,21 @@ export class UsersController {
                 return;
             }
 
-            // Verificar permissões - só admin ou o próprio usuário pode atualizar
-            if (requestingUserRole !== 'admin' && requestingUserId !== userId) {
+            // Permissões:
+            // - Admin pode atualizar qualquer usuário
+            // - Usuário comum pode atualizar:
+            //   - Ele mesmo
+            //   - Outros usuários comuns que ele criou
+            let canUpdate = false;
+            if (requestingUserRole === 'admin') {
+                canUpdate = true;
+            } else if (requestingUserRole === 'user') {
+                canUpdate =
+                    requestingUserId === userId ||
+                    (existingUser.role === 'user' && existingUser.createdBy === requestingUserId);
+            }
+
+            if (!canUpdate) {
                 res.status(403).json({
                     success: false,
                     message: 'Sem permissão para atualizar este usuário',
@@ -287,14 +351,24 @@ export class UsersController {
                 return;
             }
 
-            // Verificar permissões - apenas admin ou o criador do usuário pode deletar
-            const canDelete = requestingUserRole === 'admin' || existingUser.createdBy === requestingUserId;
+            // CORREÇÃO: Verificar permissões com segurança adicional
+            // Apenas admin pode deletar qualquer usuário
+            // Usuários comuns só podem deletar outros usuários comuns que criaram
+            let canDelete = false;
+
+            if (requestingUserRole === 'admin') {
+                // Admin pode deletar qualquer usuário (exceto outros admins, já verificado acima)
+                canDelete = true;
+            } else if (requestingUserRole === 'user') {
+                // Usuário comum só pode deletar outros usuários comuns que ele criou
+                canDelete = existingUser.role === 'user' && existingUser.createdBy === requestingUserId;
+            }
 
             if (!canDelete) {
                 res.status(403).json({
                     success: false,
                     message:
-                        'Sem permissão para deletar este usuário. Apenas administradores ou quem criou o usuário podem deletá-lo.',
+                        'Sem permissão para deletar este usuário. Apenas administradores podem deletar administradores.',
                     error: 'INSUFFICIENT_PERMISSIONS',
                 } as DeleteUserResponse);
                 return;

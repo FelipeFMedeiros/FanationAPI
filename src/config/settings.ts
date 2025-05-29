@@ -27,7 +27,7 @@ export const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
 export const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY || '';
 export const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET || '';
 
-// Função para validar configurações (chama quando necessário, não no import)
+// Função para validar configurações
 export const validateSettings = (): void => {
     const errors: string[] = [];
     const warnings: string[] = [];
