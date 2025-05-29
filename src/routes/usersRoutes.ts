@@ -119,14 +119,35 @@ const router = Router();
  *         description: Nome de usuário ou senha já existe
  *
  *   get:
- *     summary: Listar todos os usuários
- *     description: Lista todos os usuários do sistema
+ *     summary: Listar usuários com busca e ordenação
+ *     description: Lista todos os usuários do sistema com opções de busca por nome e ordenação por diferentes campos
  *     tags: [Gerenciamento de Usuários]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Buscar usuários por nome (case-insensitive)
+ *         example: "João"
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [role, name, createdAt]
+ *           default: role
+ *         description: Campo para ordenação dos resultados
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Ordem da classificação (crescente ou decrescente)
  *     responses:
  *       200:
- *         description: Lista de usuários
+ *         description: Lista de usuários com filtros aplicados
  *         content:
  *           application/json:
  *             schema:
@@ -138,8 +159,48 @@ const router = Router();
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/UserDetails'
+ *                 total:
+ *                   type: number
+ *                   description: Número total de usuários encontrados
+ *                 filters:
+ *                   type: object
+ *                   properties:
+ *                     search:
+ *                       type: string
+ *                       nullable: true
+ *                       description: Termo de busca aplicado
+ *                     sortBy:
+ *                       type: string
+ *                       description: Campo usado para ordenação
+ *                     sortOrder:
+ *                       type: string
+ *                       description: Ordem de classificação aplicada
  *                 message:
  *                   type: string
+ *                   description: Mensagem dinâmica baseada nos filtros aplicados
+ *               example:
+ *                 success: true
+ *                 users:
+ *                   - id: "507f1f77bcf86cd799439011"
+ *                     name: "Administrador"
+ *                     role: "admin"
+ *                     description: "Usuário administrador do sistema"
+ *                     createdAt: "2024-01-01T10:00:00.000Z"
+ *                     createdBy: null
+ *                     creatorName: null
+ *                   - id: "507f1f77bcf86cd799439012"
+ *                     name: "João Silva"
+ *                     role: "user"
+ *                     description: "Usuário comum"
+ *                     createdAt: "2024-01-02T10:00:00.000Z"
+ *                     createdBy: "507f1f77bcf86cd799439011"
+ *                     creatorName: "Administrador"
+ *                 total: 2
+ *                 filters:
+ *                   search: null
+ *                   sortBy: "role"
+ *                   sortOrder: "desc"
+ *                 message: "Usuários listados com sucesso"
  *       401:
  *         description: Token inválido ou ausente
  */
@@ -180,7 +241,7 @@ router.put('/update', authenticateToken, UsersController.updateUser);
  * /api/users/delete:
  *   delete:
  *     summary: Deletar usuário
- *     description: Permite que administradores ou criadores deletem usuários (exceto admin principal e própria conta)
+ *     description: Permite que administradores deletem qualquer usuário comum, ou que usuários comuns deletem outros usuários comuns que criaram. Administradores não podem ser deletados por usuários comuns.
  *     tags: [Gerenciamento de Usuários]
  *     security:
  *       - bearerAuth: []
@@ -198,7 +259,7 @@ router.put('/update', authenticateToken, UsersController.updateUser);
  *       401:
  *         description: Token inválido ou ausente
  *       403:
- *         description: Sem permissão para deletar (admin principal, própria conta, ou permissões insuficientes)
+ *         description: Sem permissão para deletar este usuário. Possíveis motivos - tentativa de deletar administrador, própria conta, ou usuário que não foi criado por você
  *       404:
  *         description: Usuário não encontrado
  */

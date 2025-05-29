@@ -282,7 +282,7 @@ export class RecorteController {
             if (material) where.material = material;
             if (cor) where.cor = cor;
 
-            // Filtro de status - corrigir comparação
+            // Filtro de status
             if (status !== undefined) {
                 if (typeof status === 'string') {
                     where.status = status === 'true';
