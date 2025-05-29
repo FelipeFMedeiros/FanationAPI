@@ -235,8 +235,21 @@ export class UsersController {
                 return;
             }
 
-            // Verificar permissões - só admin ou o próprio usuário pode atualizar
-            if (requestingUserRole !== 'admin' && requestingUserId !== userId) {
+            // Permissões:
+            // - Admin pode atualizar qualquer usuário
+            // - Usuário comum pode atualizar:
+            //   - Ele mesmo
+            //   - Outros usuários comuns que ele criou
+            let canUpdate = false;
+            if (requestingUserRole === 'admin') {
+                canUpdate = true;
+            } else if (requestingUserRole === 'user') {
+                canUpdate =
+                    requestingUserId === userId ||
+                    (existingUser.role === 'user' && existingUser.createdBy === requestingUserId);
+            }
+
+            if (!canUpdate) {
                 res.status(403).json({
                     success: false,
                     message: 'Sem permissão para atualizar este usuário',
