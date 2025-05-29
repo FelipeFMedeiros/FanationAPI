@@ -33,7 +33,7 @@ const swaggerOptions = {
         },
         servers: [
             {
-                url: `http://${HOST}:${PORT}`,
+                url: process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://${HOST}:${PORT}`,
                 description: `${NODE_ENV} environment`,
             },
         ],
@@ -152,36 +152,27 @@ const startServer = async () => {
         console.log('\n👤 Inicializando usuário admin...');
         await AuthController.initializeAdmin();
 
-        app.listen(PORT, () => {
-            console.log(`\n✅ Server running at http://${HOST}:${PORT}`);
-            console.log(`🌍 Environment: ${NODE_ENV}`);
-            console.log(`📊 Status check: http://${HOST}:${PORT}/status`);
-            console.log(`📜 Swagger UI: http://${HOST}:${PORT}/api-docs`);
-
-            console.log(`\n🔐 Auth endpoints:`);
-            console.log(`   POST http://${HOST}:${PORT}/api/auth/login`);
-            console.log(`   GET  http://${HOST}:${PORT}/api/auth/validate`);
-
-            console.log(`\n👥 Users endpoints:`);
-            console.log(`   POST http://${HOST}:${PORT}/api/users`);
-            console.log(`   GET  http://${HOST}:${PORT}/api/users`);
-            console.log(`   PUT  http://${HOST}:${PORT}/api/users/update`);
-            console.log(`   DEL  http://${HOST}:${PORT}/api/users/delete`);
-
-            console.log(`\n🎨 Recortes endpoints:`);
-            console.log(`   POST http://${HOST}:${PORT}/api/recortes/upload`);
-            console.log(`   POST http://${HOST}:${PORT}/api/recortes`);
-            console.log(`   GET  http://${HOST}:${PORT}/api/recortes`);
-            console.log(`   GET  http://${HOST}:${PORT}/api/recortes/{id}`);
-            console.log(`   GET  http://${HOST}:${PORT}/api/recortes/sku/{sku}`);
-            console.log(`   PUT  http://${HOST}:${PORT}/api/recortes/{id}`);
-            console.log(`   PUT  http://${HOST}:${PORT}/api/recortes/{id}/image`);
-            console.log(`   DEL  http://${HOST}:${PORT}/api/recortes/{id}`);
-        });
+        // Para Vercel, não precisamos chamar listen
+        if (process.env.NODE_ENV !== 'production') {
+            app.listen(PORT, () => {
+                console.log(`\n✅ Server running at http://${HOST}:${PORT}`);
+                console.log(`🌍 Environment: ${NODE_ENV}`);
+                console.log(`📊 Status check: http://${HOST}:${PORT}/status`);
+                console.log(`📜 Swagger UI: http://${HOST}:${PORT}/api-docs`);
+            });
+        }
     } catch (error) {
         console.error('\n❌ Erro ao iniciar servidor:', error);
-        process.exit(1);
+        if (process.env.NODE_ENV !== 'production') {
+            process.exit(1);
+        }
     }
 };
 
-startServer();
+// Inicializar para desenvolvimento local
+if (process.env.NODE_ENV !== 'production') {
+    startServer();
+}
+
+// Exportar para Vercel
+export default app;
